@@ -26,6 +26,9 @@ python model_main_tf2.py -- \
   --sample_1_of_n_eval_examples=$SAMPLE_1_OF_N_EVAL_EXAMPLES \
   --pipeline_config_path=$PIPELINE_CONFIG_PATH \
   --alsologtostderr
+  
+아래의 명령어 복붙.
+PYTHONPATH=$PYTHONPATH:/home/ubuntu/myproj/models/:/home/ubuntu/myproj/models/research:/home/ubuntu/myproj/models/research/object_detection python model_main_tf2.py --pipeline_config_path=/home/ubuntu/myproj/models/research/object_detection/checkpoints/efficientdet_d0_coco17_tpu-32/ssd_efficientdet_d0_512x512_coco17_tpu-8.config --model_dir=/home/ubuntu/myproj/models/research/object_detection/checkpoints/ --alsologtostderr
 """
 from absl import flags
 import tensorflow.compat.v2 as tf
@@ -103,7 +106,7 @@ def main(unused_argv):
       strategy = tf.compat.v2.distribute.MirroredStrategy()
 
     with strategy.scope():
-      model_lib_v2.train_loop(
+      model_lib_v2.train_loop(  # ckpt에서 훈련 시작.
           pipeline_config_path=FLAGS.pipeline_config_path,
           model_dir=FLAGS.model_dir,
           train_steps=FLAGS.num_train_steps,

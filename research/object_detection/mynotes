@@ -1,0 +1,4 @@
+TFRecord 파일을 만들기 위한 스크립트:
+    1. xml_to_csv.py: train/valid/testset 별로 모은 Pascal VOC 형식의 xml 파일들 내 정보를 하나의 csv로 통합한다.
+    2. generate_labelmap.py: 생성할 record 파일들 속 example들은 어느 클래스에 속할 수 있는지 모은 목록.
+    3. generate_tfrecord.py: 1과 2에서 생성한 파일들과 이미지 파일들을 읽어 원하는 갯수만큼의 record 파일 생성(각 record 파일은 150MB가 적당하다).
