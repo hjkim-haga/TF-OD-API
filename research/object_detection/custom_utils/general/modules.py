@@ -14,3 +14,9 @@ def filter_by_type(directory: str, extension: str)-> Generator:
         sys.exit(f'Not exist the directory: {directory}')
 
     return (f for f in os.scandir(directory) if os.path.splitext(f)[1] == extension)
+
+
+def does_file_exists(file_path):
+    abspath = os.path.abspath(file_path)
+    if not os.path.exists(file_path):
+        print(f'{abspath} not found.')
