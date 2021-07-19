@@ -53,8 +53,9 @@ def general_ensemble(dets, iou_thresh=0.5, weights=None):
 
     :param dets: 검출들의 목록. 각 검출은 하나의 디텍터에서 출력된 모든 결과.
     dim0는 각 디텍터를 의미, 이후에는 각각의 디텍터들의 검출 결과.
-    bbox들의 리스트 형식이며, 각 box는 [box_x, box_y, box_w, box_h, class, confidence]를 포함한다.
+    box들의 리스트 형식이며, 각 box는 [box_x, box_y, box_w, box_h, class, confidence]를 포함한다.
     box_x와 box_y는 좌표의 중점이며, box_w와 box_h는 각각 너비와 높이이다.
+    confidence는 tfhub의 detection 모델 출력의 `score`에 해당한다.
     int인 class를 제외한 나머지는 float이다.
     :param iou_thresh: 두 상자가 같은 클래스라고 판별해 같은 것으로 여겨지는 IOU의 문턱값.
     :param weights: 가중치(NN의 가중치가 아님)들의 리스트.
@@ -67,36 +68,33 @@ def general_ensemble(dets, iou_thresh=0.5, weights=None):
     
     ndets = len(dets)
     
-    # 가중치 없으면 모두 동일하게 취급.
+    # 가중치 매기기
     if weights is None:
         w = 1 / float(ndets)
         weights = [w] * ndets
     else:
         assert (len(weights) == ndets)
         
-        # 정규화
+        # [0, 1] 범위 정규화
         s = sum(weights)
-        for i in range(0, len(weights)):
+        for i in range(len(weights)):
             weights[i] /= s
     
     out = list()  # 이 함수의 return.
-    used = list()
+    used = list()  # 살펴본 box는 넘어간다.
     
-    for idet in range(0, ndets):
-        det = dets[idet]
-        for box in det:
+    for idet in range(ndets):
+        det = dets[idet]  # i번째 모델의 det 결과.
+        for box in det:  # i번째 모델의 det 중 b번째 box
             if box in used:
                 continue
-            
             used.append(box)
-            # 다른 디텍터 결과를 살펴 나가면서 같은 클래스이면서 겹치는 box를 찾는다.
+            
+            # 각 디텍터마다 같은 사물을 가리킨다고 판단할 box를 찾는다.
             found = []
-            for iodet in range(0, ndets):
+            for iodet in range(idet + 1, ndets):  # 'i'-th 'o'ther 'det'ection
                 odet = dets[iodet]
-                if odet == det:
-                    continue
-                
-                bestbox = None
+                bestbox = None  # `box`는 이거와 가장 유사해
                 bestiou = iou_thresh
                 for obox in odet:
                     # 미사용인 경우
@@ -108,20 +106,23 @@ def general_ensemble(dets, iou_thresh=0.5, weights=None):
                                 bestiou = iou
                                 bestbox = obox
                 
+                # 같은 사물을 가리킨다고 믿을만한 box 하나를 찾았다면,
+                # 그 box를 만든 detector의 weight를 같이 달아두기.
                 if not bestbox is None:
                     w = weights[iodet]
                     found.append((bestbox, w))
                     used.append(bestbox)
             
             # 이제 다른 모든 디텍터들을 다 살펴 본 상태.
-            if len(found) == 0:
-                new_box = list(box)
-                new_box[5] /= ndets
+            if len(found) == 0:  # 일치한다고 여길 box가 아무 것도 없었다면
+                new_box = list(box)  # 별개 객체로 생성.
+                new_box[5] /= ndets  # [5]는 confidence
                 out.append(new_box)
             else:
                 allboxes = [(box, weights[idet])]
-                allboxes.extend(found)
+                allboxes.extend(found)  # 같은 사물의 box라고 해당한 건 하나에 죽 이어 붙인다.
                 
+                # 같은 사물이라고 판단한 box들을 하나로 종합(ensemble)한 결과가 될 것이다.
                 xc = 0.0
                 yc = 0.0
                 bw = 0.0
@@ -130,21 +131,19 @@ def general_ensemble(dets, iou_thresh=0.5, weights=None):
                 
                 wsum = 0.0
                 for bb in allboxes:
-                    w = bb[1]  # [0]: 박스 정보, [1]: 가중치
-                    wsum += w
-                    
-                    b = bb[0]
+                    b, w = bb[0], bb[1]  # [0]: 박스 정보, [1]: 그 박스를 찾은 detector의 가중치
+                    wsum += w  # detector의 총 개수보다 같다고 찾은 box 숫자가 작으면 가중치가 부족해서 문제가 생겨!!!!!
+                    # 사물 좌표 calibration
                     xc += w * b[0]
                     yc += w * b[1]
                     bw += w * b[2]
                     bh += w * b[3]
                     conf += w * b[5]
-                
                 xc /= wsum
                 yc /= wsum
                 bw /= wsum
                 bh /= wsum
-                
+
                 new_box = [xc, yc, bw, bh, box[4], conf]
                 out.append(new_box)
     return out

@@ -1,10 +1,12 @@
-#%%
+"""
+PYTHONPATH=$PYTHONPATH:/home/ubuntu/myproj/models/:/home/ubuntu/myproj/models/research:/home/ubuntu/myproj/models/research/object_detection python main.py
 
+"""
 import importlib
 import os
 import pickle
 import sys
-from dataclasses import dataclass
+from collections.abc import Iterable
 
 import numpy as np
 import tensorflow as tf
@@ -13,8 +15,6 @@ import general_ensemble as ensemble
 from research.object_detection.custom_utils import images as img_tool
 
 importlib.reload(img_tool)
-
-#%%
 
 
 def load_models(model_list):
@@ -53,22 +53,41 @@ def boxes_for_ensemble(pred):
     :return:
         [bbox_xcen, bbox_ycen, bbox_width, bbox_height, class_id, score] 형식의 1개 이상의 검출 결과 리스트.
     """
-    bboxes = pred['detection_boxes'][0]  # relative pos
-    classes = pred['detection_classes'][0]
-    scores = pred['detection_scores'][0]
+    if isinstance(pred['detection_classes'][0], Iterable):
+        bboxes = pred['detection_boxes'][0]  # relative pos
+        classes = pred['detection_classes'][0]
+        scores = pred['detection_scores'][0]
 
-    det_for_detector = []
-    for b, c, s in zip(bboxes, classes, scores):
-        ymin = b[0].numpy()
-        xmin = b[1].numpy()
-        ymax = b[2].numpy()
-        xmax = b[3].numpy()
-        width = xmax - xmin
-        height = ymax - ymin
-        xcen = xmin + width / 2
-        ycen = ymin + height / 2
-        det_for_detector.append([xcen, ycen, width, height, c.numpy(), s.numpy()])
-    return det_for_detector
+        det_for_detector = []
+        for b, c, s in zip(bboxes, classes, scores):
+            ymin = b[0].numpy()
+            xmin = b[1].numpy()
+            ymax = b[2].numpy()
+            xmax = b[3].numpy()
+            width = xmax - xmin
+            height = ymax - ymin
+            xcen = xmin + width / 2
+            ycen = ymin + height / 2
+            det_for_detector.append([xcen, ycen, width, height, c.numpy(), s.numpy()])
+        return det_for_detector
+
+    else:
+        bboxes = pred['detection_boxes']  # relative pos
+        classes = pred['detection_classes']
+        scores = pred['detection_scores']
+
+        det_for_detector = []
+        for b, c, s in zip(bboxes, classes, scores):
+            ymin = b[0]
+            xmin = b[1]
+            ymax = b[2]
+            xmax = b[3]
+            width = xmax - xmin
+            height = ymax - ymin
+            xcen = xmin + width / 2
+            ycen = ymin + height / 2
+            det_for_detector.append([xcen, ycen, width, height, c, s])
+        return det_for_detector
 
 
 def boxes_for_drawer(dets_from_ensemble):
@@ -85,8 +104,8 @@ def boxes_for_drawer(dets_from_ensemble):
         xcen, ycen, width, height, label, score = det
         xmin = (xcen - width / 2)
         xmax = (xcen + width / 2)
-        ymin = (ycen - width / 2)
-        ymax = (ycen + width / 2)
+        ymin = (ycen - height / 2)
+        ymax = (ycen + height / 2)
         ens_bboxes.append(np.array([ymin, xmin, ymax, xmax]))
         ens_classes.append(label)
         ens_scores.append(score)
@@ -102,29 +121,35 @@ def ensemble_detect(image_path, models, weights):
     :param image_path: jpeg 이미지 경로.
     :param models: detector들의 dict
     :param weights: mAP가 높은 모델은 중요하게 취급하려고 넣은 모델별 가중치.
-    :return: annotation들이 그려진 이미지
+    :return: 앙상블 결과 담은 dict 객체, annotation들이 그려진 이미지 두 가지를 tuple로.
+        앙상블 결과는 다음과 같다.
+            'file_name': 검출 대상 이미지 파일명.
+            'ens_bboxes': 앙상블 bbox 좌표(ymin, xmin, ymax, xmax) 리스트,
+            'ens_classes': 레이블 id 리스트,
+            'ens_scores': 확률값 리스트,
+            'preds_voters': 앙상블을 이루던 모델들의 결과 모음(tfhub detector의 출력 형식 따름).
     """
     # 입력 이미지 detector에 맞게 변환.
     if not os.path.exists(image_path):
         print(f'The image does not exist.')
         sys.exit(1)
-
+    
     image_tensor = img_tool.load_img(image_path)
     image_tensor = tf.expand_dims(image_tensor, axis=0)
-
+    
     # 각 detector in `models` 결과 도출하기.
     preds = []
     for k, v in models.items():
         pred = v.signatures['serving_default'](image_tensor)
         preds.append(pred)
-
+    
     # 앙상블 결과 도출하기.
     dets_for_ensemble = []
     for pred in preds:
         dets_for_detector = boxes_for_ensemble(pred)
         dets_for_ensemble.append(dets_for_detector)
     ensemble_results = ensemble.general_ensemble(dets_for_ensemble, weights=weights)
-
+    
     # 앙상블 결과를 그리기 함수에 맞는 형식으로 변환.
     ens_bboxes, ens_classes, ens_scores = boxes_for_drawer(ensemble_results)
     
@@ -142,16 +167,15 @@ def ensemble_detect(image_path, models, weights):
             'detection_classes': pred['detection_classes'],
             'detection_scores': pred['detection_scores'],
         })
-        
+    
     return {
-        'file_name': os.path.split(image_path)[1],
-        'ens_bboxes': ens_bboxes,
-        'ens_classes': ens_classes,
-        'ens_scores': ens_scores,
-        'preds_voters': lightened_preds,  # 앙상블을 이루던 모델들의 결과 모음.
-    }, image_with_bbox
+               'file_name': os.path.split(image_path)[1],
+               'ens_bboxes': ens_bboxes,
+               'ens_classes': ens_classes,
+               'ens_scores': ens_scores,
+               'preds_voters': lightened_preds,  # 앙상블을 이루던 모델들의 결과 모음.
+           }, image_with_bbox
 
-#%%
 
 model_dir = '../savedmodels'
 model_list = [
@@ -168,12 +192,7 @@ for path in model_pathes:
 
 models = load_models(model_pathes)
 
-#%%
-
 weights = [38.3, 39.5, 38.4]  # mAP 기준으로 산출
-weights /= np.sum(weights)
-
-#%%
 
 # label map
 labels = []
@@ -187,46 +206,46 @@ for i in range(91):
     label = line[17:-2]
     labels.append(label)
 
-
-#%%
 # 디렉토리 대상 인식 결과 확인 (ensemble)
 outfile = '../test_images/ensemble_result.pickle'
 image_dir = '../test_images/ensemble-test'
 pred_out_dir = '../test_images/ensemble-result'
 ensemble_detections = []  # [i]: 한 장 이미지 내 결과
 
+# 앙상블 모델 추론.
 for i, image_path in enumerate(os.scandir(image_dir)):
     image_path = os.path.abspath(image_path)
-    pred_on_image, image_with_bbox = ensemble_detect(image_path, models, weights)
-    ensemble_detections.append(pred_on_image)
+    preds_on_image, image_with_bbox = ensemble_detect(image_path, models, weights)
     basename = os.path.split(image_path)[1]
+    print(f'{i + 1} th inference on {basename} done')
+    
+    # 앙상블 결과를 이미지 상에 그리기.
+    ensemble_detections.append(preds_on_image)
     tf.keras.preprocessing.image.save_img(
         os.path.join(pred_out_dir, basename),
         image_with_bbox)
-    print(f'{i + 1} th inference on {basename} done')
 
+    # metrics를 위한 detection 파일 생성
+    # (image 파일과 동일한 이름으로 txt를 생성해서 그 안에 한 줄마다 하나의 detection 결과를 넣는다.
+    file_name = os.path.splitext(preds_on_image['file_name'])[0] + '.txt'
+    ens_bboxes = preds_on_image['ens_bboxes']
+    ens_classes = preds_on_image['ens_classes']
+    ens_scores = preds_on_image['ens_scores']
+    lines_for_metrics: list = boxes_for_ensemble({
+        'detection_boxes': ens_bboxes,
+        'detection_classes': ens_classes,
+        'detection_scores': ens_scores,
+    })  # [id, score, xc, yc, w, h] in relatively
+
+    with open(os.path.join('../test_images/ensemble-result', file_name), 'w') as fout:
+        for line in lines_for_metrics:
+            xc, yc, w, h, lbl_id, score = line
+            line = f'{int(lbl_id)} {score} {xc} {yc} {w} {h}\n'
+            fout.write(line)
+        
+    
+# 앙상블을 이루던 각 모델들 결과를 저장.
 with open(outfile, 'wb') as fout:
     pickle.dump(ensemble_detections, fout)
 print('Pickle file created for all the detections of images.')
 
-#%%
-
-# model1 = {'retinanet_resnet50_v1_fpn_1024x1024': models['retinanet_resnet50_v1_fpn_1024x1024']}
-# model2 = {'retinanet_resnet101_v1_fpn_1024x1024': models['retinanet_resnet101_v1_fpn_1024x1024']}
-# model3 = {'efficientdet_d1': models['efficientdet_d1']}
-# 
-# ensemble_detect(
-#     image_path,
-#     model3,
-#     [1])
-
-#%%
-
-# path1 = os.path.join(image_dir, '000000000110.jpg')
-# path2 = os.path.join(image_dir, '000000000113.jpg')
-# image_tensor1 = img_tool.load_img(path1)
-# image_tensor2 = img_tool.load_img(path2)
-# 
-# image_tensors = [image_tensor1, image_tensor2]
-# 
-# model1['retinanet_resnet50_v1_fpn_1024x1024'].signatures['serving_default'](tf.TensorArray(image_tensors, size=3))
