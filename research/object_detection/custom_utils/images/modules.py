@@ -205,3 +205,14 @@ def draw_boxes(image, boxes, class_names, scores, max_boxes=10, min_score=0.1):
                 display_str_list=[display_str])
             np.copyto(image, np.array(image_pil))
     return image
+
+
+if __name__ == '__main__':
+    image_path = 'resized/airconditioner-ceil_0000349.jpg'
+    
+    image = load_img(image_path)
+    ymin, ymax, xmin, xmax = 336, 563, 548, 1429
+    draw_bounding_box_on_image(
+        image, ymin, xmin, ymax, xmax, color='red', font=ImageFont.load_default()
+    )
+    

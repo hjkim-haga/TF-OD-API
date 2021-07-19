@@ -1,6 +1,8 @@
+import collections
 import json
 import os
 import sys
+import xml.etree.ElementTree as ET
 from collections import namedtuple
 
 from PIL import Image
@@ -143,6 +145,35 @@ def adjust_yolo_annot(img_info: namedtuple, bbox_yolo: namedtuple) -> namedtuple
     y1 = cen_y + h / 2
     
     return bbox_haga(x0, y0, x1, y1)
+
+
+def read_pascal_voc(path: str) -> dict:
+    # Parse the xml
+    tree = ET.parse(os.path.abspath(path))
+    root = tree.getroot()
+    size_tag = root.find('size')
+    object_tag = root.find('object')
+    bndbox_tag = object_tag.find('bndbox')
+    
+    # Get the annotation
+    width = int(size_tag.find('width').text)
+    height = int(size_tag.find('height').text)
+    name = object_tag.find('name').text
+    xmin = int(bndbox_tag.find('xmin').text)
+    ymin = int(bndbox_tag.find('ymin').text)
+    xmax = int(bndbox_tag.find('xmax').text)
+    ymax = int(bndbox_tag.find('ymax').text)
+    
+    return {  # bbox not normalized
+        'filename': os.path.basename(path),
+        'name': name,
+        'width': width,
+        'height': height,
+        'xmin': xmin,
+        'ymin': ymin,
+        'xmax': xmax,
+        'ymax': ymax,
+    }
 
 
 class Coco:
@@ -605,12 +636,28 @@ if __name__ == '__main__':
     test_dir = 'test_images/ensemble-test'
     result_path = 'test_images/light_coco_train.json'
     
-    # # 이미지 폴더 안에 있는 이미지들만 코코 객체 따로 만들기
     # # train
-    # train_file = 'test_images/instances_train2017.json'
-    # coco_train = Coco(train_file)
-    # lighten_coco_train = coco_train.lighten_coco(test_dir)
-    # print(len(lighten_coco_train['images']))
+    train_file = 'test_images/test/light_coco.json'
+    light_coco_train = Coco(train_file)
+    
+    # 한 이미지가 지니고 있는 최대 annotations 수 찾기
+    image_ids = set()
+    for image_obj in light_coco_train.coco['images']:
+        image_ids.add(image_obj['id'])
+    d = collections.defaultdict()
+    for i in image_ids:
+        d[i] = 0
+    image_ids = d
+    
+    for annot_obj in light_coco_train.coco['annotations']:
+        image_ids[annot_obj['image_id']] += 1
+    max_num_annotations_per_img = 0
+    for num_annot in image_ids.values():
+        if max_num_annotations_per_img < num_annot:
+            max_num_annotations_per_img = num_annot
+    print(max_num_annotations_per_img)
+    
+    # # 이미지 폴더 안에 있는 이미지들만 코코 객체 따로 만들기
     # with open(result_path, 'w') as fout:
     #     json.dump(lighten_coco_train, fout)
     #
@@ -622,6 +669,3 @@ if __name__ == '__main__':
     # print(len(lighten_coco_val['images']))
     # with open(result_path, 'w') as fout:
     #     json.dump(lighten_coco_val, fout)
-
-
-    
