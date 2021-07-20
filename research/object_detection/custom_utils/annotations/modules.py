@@ -84,13 +84,15 @@ def calibrate_bbox(annotation: namedtuple) -> namedtuple:
     x1 = annotation.bbox_x1
     y0 = annotation.bbox_y0
     y1 = annotation.bbox_y1
-    w = annotation.img_w
-    h = annotation.img_h
+    w =  annotation.img_w
+    h =  annotation.img_h
     
     x0 = 1 if x0 <= 0 else x0
     y0 = 1 if y0 <= 0 else y0
     x1 = w - 1 if x1 >= w else x1
     y1 = h - 1 if y1 >= h else y1
+    
+    return x0, y0, x1, y1
 
 
 def read_annotations(path: str) -> namedtuple:
@@ -174,6 +176,29 @@ def read_pascal_voc(path: str) -> dict:
         'xmax': xmax,
         'ymax': ymax,
     }
+
+
+def modify_pascal_voc(path, new_path, **kwargs):
+    """Modify pascal voc xml and save it
+
+    :param path: path to pascal voc will be modified.
+    :param new_path: path to modified file.
+    :param dict kwargs: key is the elem name, value is the new value for the element.
+    :return: None
+    """
+    tree = ET.parse(path)
+    root = tree.getroot()
+    
+    all_desc = []
+    for elem, val in kwargs.items():
+        elem_iter = root.iter(elem)
+        for el in elem_iter:
+            all_desc.append(el)
+    
+    for el in all_desc:
+        el.text = str(kwargs[el.tag])
+    
+    tree.write(new_path)
 
 
 class Coco:
@@ -633,29 +658,49 @@ class Coco:
 
 
 if __name__ == '__main__':
-    test_dir = 'test_images/ensemble-test'
-    result_path = 'test_images/light_coco_train.json'
+    dataset_path = '/home/ubuntu/haga-dataset/electronics/train/'
+    annot_list = (f for f in os.scandir(dataset_path) if os.path.splitext(f)[1] == '.xml')
+    for file in annot_list:
+        pascal_annot = read_pascal_voc(file)
+        Annot = namedtuple('Annot', ('bbox_x0', 'bbox_y0', 'bbox_x1', 'bbox_y1', 'img_w', 'img_h'))
+        annot = Annot(bbox_x0=pascal_annot['xmin'],
+                      bbox_y0=pascal_annot['ymin'],
+                      bbox_x1=pascal_annot['xmax'],
+                      bbox_y1=pascal_annot['ymax'],
+                      img_w=pascal_annot['width'],
+                      img_h=pascal_annot['height'])
+        calib_bbox = calibrate_bbox(annot)  # x0, y0, x1, y1
+        modify_pascal_voc(os.path.abspath(file), os.path.abspath(file),
+                          **{'xmin': calib_bbox[0],
+                             'ymin': calib_bbox[1],
+                             'xmax': calib_bbox[2],
+                             'ymax': calib_bbox[3]})
+        print(f'{os.path.basename(file)} done.')
+
     
-    # # train
-    train_file = 'test_images/test/light_coco.json'
-    light_coco_train = Coco(train_file)
-    
-    # 한 이미지가 지니고 있는 최대 annotations 수 찾기
-    image_ids = set()
-    for image_obj in light_coco_train.coco['images']:
-        image_ids.add(image_obj['id'])
-    d = collections.defaultdict()
-    for i in image_ids:
-        d[i] = 0
-    image_ids = d
-    
-    for annot_obj in light_coco_train.coco['annotations']:
-        image_ids[annot_obj['image_id']] += 1
-    max_num_annotations_per_img = 0
-    for num_annot in image_ids.values():
-        if max_num_annotations_per_img < num_annot:
-            max_num_annotations_per_img = num_annot
-    print(max_num_annotations_per_img)
+    # # 한 이미지가 지니고 있는 최대 annotations 수 찾기
+    # test_dir = 'test_images/ensemble-test'
+    # result_path = 'test_images/light_coco_train.json'
+    #
+    # # # train
+    # train_file = 'test_images/test/light_coco.json'
+    # light_coco_train = Coco(train_file)
+    #
+    # image_ids = set()
+    # for image_obj in light_coco_train.coco['images']:
+    #     image_ids.add(image_obj['id'])
+    # d = collections.defaultdict()
+    # for i in image_ids:
+    #     d[i] = 0
+    # image_ids = d
+    #
+    # for annot_obj in light_coco_train.coco['annotations']:
+    #     image_ids[annot_obj['image_id']] += 1
+    # max_num_annotations_per_img = 0
+    # for num_annot in image_ids.values():
+    #     if max_num_annotations_per_img < num_annot:
+    #         max_num_annotations_per_img = num_annot
+    # print(max_num_annotations_per_img)
     
     # # 이미지 폴더 안에 있는 이미지들만 코코 객체 따로 만들기
     # with open(result_path, 'w') as fout:
