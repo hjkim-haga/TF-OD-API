@@ -84,25 +84,30 @@ if __name__ == '__main__':
         annot_filename = os.path.basename(apath)
         if os.path.splitext(img_filename)[0] != os.path.splitext(annot_filename)[0]:
             sys.exit('The img and annot file are not matched.')
-        print(img_filename)
         
+        # If there's already the processed file, skip it.
+        if img_filename in os.listdir(dest):
+            print(f'{img_filename} aleardy exists. Skip it.')
+            continue
+        print(img_filename)
+
         # Crop around the bbox(Don't use opnecv. It cannot deal with the exif rotation.)
-        # i = cv2.imread(os.path.abspath(ipath))
-        # i = cv2.cvtColor(i, cv2.COLOR_BGR2RGB)
+        i = cv2.imread(os.path.abspath(ipath))
+        i = cv2.cvtColor(i, cv2.COLOR_BGR2RGB)
         i = Image.open(os.path.abspath(ipath))
         i = np.array(i)
-        
+
         adict = annot_tool.read_pascal_voc(apath)
         xmin, ymin, xmax, ymax = adict['xmin'], adict['ymin'], adict['xmax'], adict['ymax']
         b0 = [xmin, ymin, xmax, ymax, adict['name']]
         b = [b0]
         transformed = transform(image=i, bboxes=b)
-        
+
         # Save the cropped image and related annotations.
         cv2.imwrite(os.path.join(dest, img_filename),
                     cv2.cvtColor(transformed['image'], cv2.COLOR_RGB2BGR))
         xmin, ymin, xmax, ymax, label = transformed['bboxes'][0]
-        
+
         new_annot = {
             'width': required_width,
             'height': required_height,
