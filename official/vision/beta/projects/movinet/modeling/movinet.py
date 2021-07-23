@@ -751,6 +751,9 @@ S12: KernelSize = (1, 2, 2)
 S22: KernelSize = (2, 2, 2)
 S21: KernelSize = (2, 1, 1)
 
+# Type for a state container (map)
+TensorMap = Mapping[str, tf.Tensor]
+
 
 @dataclasses.dataclass
 class BlockSpec:
@@ -1027,6 +1030,7 @@ class Movinet(tf.keras.Model):
                bias_regularizer: Optional[str] = None,
                stochastic_depth_drop_rate: float = 0.,
                use_external_states: bool = False,
+               output_states: bool = True,
                **kwargs):
     """MoViNet initialization function.
 
@@ -1061,6 +1065,10 @@ class Movinet(tf.keras.Model):
       stochastic_depth_drop_rate: the base rate for stochastic depth.
       use_external_states: if True, expects states to be passed as additional
         input.
+      output_states: if True, output intermediate states that can be used to run
+          the model in streaming mode. Inputting the output states of the
+          previous input clip with the current input clip will utilize a stream
+          buffer for streaming video.
       **kwargs: keyword arguments to be passed.
     """
     block_specs = BLOCK_SPECS[model_id]
@@ -1093,6 +1101,7 @@ class Movinet(tf.keras.Model):
     self._bias_regularizer = bias_regularizer
     self._stochastic_depth_drop_rate = stochastic_depth_drop_rate
     self._use_external_states = use_external_states
+    self._output_states = output_states
 
     if self._use_external_states and not self._causal:
       raise ValueError('External states should be used with causal mode.')
@@ -1119,8 +1128,7 @@ class Movinet(tf.keras.Model):
       self,
       input_specs: tf.keras.layers.InputSpec,
       state_specs: Optional[Mapping[str, tf.keras.layers.InputSpec]] = None,
-  ) -> Tuple[Mapping[str, tf.keras.Input], Tuple[Mapping[str, tf.Tensor],
-                                                 Mapping[str, tf.Tensor]]]:
+  ) -> Tuple[TensorMap, Union[TensorMap, Tuple[TensorMap, TensorMap]]]:
     """Builds the model network.
 
     Args:
@@ -1131,7 +1139,7 @@ class Movinet(tf.keras.Model):
     Returns:
       Inputs and outputs as a tuple. Inputs are expected to be a dict with
       base input and states. Outputs are expected to be a dict of endpoints
-      and output states.
+      and (optional) output states.
     """
     state_specs = state_specs if state_specs is not None else {}
 
@@ -1227,7 +1235,7 @@ class Movinet(tf.keras.Model):
       else:
         raise ValueError('Unknown block type {}'.format(block))
 
-    outputs = (endpoints, states)
+    outputs = (endpoints, states) if self._output_states else endpoints
 
     return inputs, outputs
 
@@ -1387,6 +1395,8 @@ class Movinet(tf.keras.Model):
         'kernel_regularizer': self._kernel_regularizer,
         'bias_regularizer': self._bias_regularizer,
         'stochastic_depth_drop_rate': self._stochastic_depth_drop_rate,
+        'use_external_states': self._use_external_states,
+        'output_states': self._output_states,
     }
     return config_dict
 
