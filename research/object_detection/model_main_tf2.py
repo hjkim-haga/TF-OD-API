@@ -28,11 +28,23 @@ python model_main_tf2.py -- \
   --alsologtostderr
   
 아래의 명령어 복붙.
-PYTHONPATH=$PYTHONPATH:/home/ubuntu/myproj/models/:/home/ubuntu/myproj/models/research:/home/ubuntu/myproj/models/research/object_detection python model_main_tf2.py --pipeline_config_path=/home/ubuntu/myproj/models/research/object_detection/checkpoints/efficientdet_d0_coco17_tpu-32/ssd_efficientdet_d0_512x512_coco17_tpu-8.config --model_dir=/home/ubuntu/myproj/models/research/object_detection/checkpoints/ --alsologtostderr
+PYTHONPATH=$PYTHONPATH:/home/ubuntu/myproj/models/:/home/ubuntu/myproj/models/research:/home/ubuntu/myproj/models/research/object_detection \
+    python model_main_tf2.py --pipeline_config_path=/home/ubuntu/myproj/models/research/object_detection/checkpoints/ssd_mobilenet_v2_320x320_coco17_tpu-8/pipeline.config \
+    --model_dir=/home/ubuntu/myproj/models/research/object_detection/checkpoints/mobilenetv2_training --alsologtostderr
 """
 from absl import flags
 import tensorflow.compat.v2 as tf
 from object_detection import model_lib_v2
+
+# Save GPU mem usage.
+# gpus = tf.config.experimental.list_physical_devices('GPU')
+# if gpus:
+#   try:
+#     for i in range(len(gpus)):
+#       tf.config.experimental.set_memory_growth(gpus[i], True)
+#   except RuntimeError as e:
+#     print(e)
+
 
 flags.DEFINE_string('pipeline_config_path', None, 'Path to pipeline config '
                     'file.')

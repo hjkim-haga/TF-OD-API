@@ -352,15 +352,13 @@ def is_object_based_checkpoint(checkpoint_path):
 def load_fine_tune_checkpoint(model, checkpoint_path, checkpoint_type,
                               checkpoint_version, run_model_on_dummy_input,
                               input_dataset, unpad_groundtruth_tensors):
-  """Load a fine tuning classification or detection checkpoint.
+  """미세조정 분류(classificatoin) 혹은 검출(detection) 체크포인트를 불러온다.
 
-  To make sure the model variables are all built, this method first executes
-  the model by computing a dummy loss. (Models might not have built their
-  variables before their first execution)
-
-  It then loads an object-based classification or detection checkpoint.
-
-  This method updates the model in-place and does not return a value.
+  모델  변수가 모두 빌드됐는지 확인코자, 이 메소드는 더미 손실을 계산하면서 모델을 먼저 실행한다.
+  (모델들은 첫 실행 전에는 자기 변수들을 불러오지 못할 수도 있다.)
+  
+  그러고 나면 객체 기반으로 분류나 검출 체크포인트를 불러온다.
+  이 메소드는 따로 새로운 값을 리턴하지 않고 모델 객체 자체를 업데이트한다.
 
   Args:
     model: A DetectionModel (based on Keras) to load a fine-tuning
@@ -447,46 +445,41 @@ def train_loop(
     performance_summary_exporter=None,
     num_steps_per_iteration=NUM_STEPS_PER_ITERATION,
     **kwargs):
-  """Trains a model using eager + functions.
+  """eager + functions을 사용해서 모델을 훈련한다.
 
-  This method:
-    1. Processes the pipeline configs
-    2. (Optionally) saves the as-run config
-    3. Builds the model & optimizer
-    4. Gets the training input data
-    5. Loads a fine-tuning detection or classification checkpoint if requested
-    6. Loops over the train data, executing distributed training steps inside
-       tf.functions.
-    7. Checkpoints the model every `checkpoint_every_n` training steps.
-    8. Logs the training metrics as TensorBoard summaries.
+  이 메소드는:
+    1. 파이프라인 설정을 처리한다.
+    2. (옵션) 동적(as-run) 설정을 저장한다.
+    3. 모델과 옵티마이저를 빌드한다.
+    4. 훈련 입력 데이터를 얻는다.
+    5. 요청이 있으면 미세조정 감지나 분류 체크포인트를 불러온다.
+    6. tf.functions에 들어 있는 분산 훈련 단계를 실행하면서, 훈련 데이터를 대상으로 반복한다.
+    7. 매  `checkpoint_every_n` 훈련 단계마다 체크포인트를 생성한다.
+    8. 훈련 지표를 TensorBoard 요약에 찍는다.
 
   Args:
-    pipeline_config_path: A path to a pipeline config file.
+    pipeline_config_path: 파이프라인 설정 파일 경로.
     model_dir:
-      The directory to save checkpoints and summaries to.
-    config_override: A pipeline_pb2.TrainEvalPipelineConfig text proto to
-      override the config from `pipeline_config_path`.
-    train_steps: Number of training steps. If None, the number of training steps
-      is set from the `TrainConfig` proto.
-    use_tpu: Boolean, whether training and evaluation should run on TPU.
-    save_final_config: Whether to save final config (obtained after applying
-      overrides) to `model_dir`.
+      체크포인트와 TB 요약을 저장할 디렉토리.
+    config_override: `pipeline_config_path`의 설정을 덮어쓸 pipeline_pb2.TrainEvalPipelineConfig text proto.
+    train_steps: 훈련 단계 수. None이면 훈련 단계 수는 `TrainConfig` proto에 의해 결정된다.
+    use_tpu: Boolean, 훈련과 평가가 TPU 상에서 이뤄져야 하는지 정한다.
+    save_final_config: (설정을 덮어쓰고 난 뒤) 최종 설정을 `model_dir`에 저장할지 결정.
     checkpoint_every_n:
-      Checkpoint every n training steps.
+      매 n번째마다 체크포인트를 저장한다.
     checkpoint_max_to_keep:
-      int, the number of most recent checkpoints to keep in the model directory.
-    record_summaries: Boolean, whether or not to record summaries defined by
-      the model or the training pipeline. This does not impact the summaries
-      of the loss values which are always recorded. Examples of summaries
-      that are controlled by this flag include:
-        - Image summaries of training images.
-        - Intermediate tensors which maybe logged by meta architectures.
-    performance_summary_exporter: function for exporting performance metrics.
-    num_steps_per_iteration: int, The number of training steps to perform
-      in each iteration.
-    **kwargs: Additional keyword arguments for configuration override.
+      int, 모델 디렉토리에 남겨놓을 가장 최근 체크포인트의 번호.
+    record_summaries: Boolean, 모델이나 훈련 파이프라인에 의해 정의되는 요약을 기록할지 정한다.
+      항상 기록되는 손실값의 요약에는 영향을 미치지 않는다.
+      이 플래그에 의해 결정되는 요약의 예는 다음과 같다:
+        - 훈련 이미지들의 이미지 요약.
+        - 아마 메타 구조(meta architectures)에 의해 로그가 찍히는 중간 텐서들.
+    performance_summary_exporter: 성능 지표를 내보내는(exporting) 함수.
+    num_steps_per_iteration: int, 매 iter마다 훈련 단계의 수
+    **kwargs: 설정을 덮어쓸 추가 kwargs.
   """
-  ## Parse the configs
+  # 설정과 관련된 작업을 실행한다.
+  ## 설정을 해석한다.
   get_configs_from_pipeline_file = MODEL_BUILD_UTIL_MAP[
       'get_configs_from_pipeline_file']
   merge_external_params_with_configs = MODEL_BUILD_UTIL_MAP[
@@ -503,8 +496,10 @@ def train_loop(
   })
   configs = merge_external_params_with_configs(
       configs, None, kwargs_dict=kwargs)
+  # configs['파이프라인파일속설정'] 이하는 모두 `.`으로 접근한다.
   model_config = configs['model']
   train_config = configs['train_config']
+  # train_input_config는 pipeline 파일 속 train_input_reader를 바꿔썼을 뿐이다.
   train_input_config = configs['train_input_config']
 
   unpad_groundtruth_tensors = train_config.unpad_groundtruth_tensors
@@ -513,7 +508,7 @@ def train_loop(
   if train_config.gradient_clipping_by_norm > 0:
     clip_gradients_value = train_config.gradient_clipping_by_norm
 
-  # update train_steps from config but only when non-zero value is provided
+  # 0 아닌 값이 주어졌을 때만 train_steps을 config에서 갱신한다.
   if train_steps is None and train_config.num_steps != 0:
     train_steps = train_config.num_steps
 
@@ -524,28 +519,29 @@ def train_loop(
     raise ValueError('train_pb2.load_all_detection_checkpoint_vars '
                      'unsupported in TF2')
 
-  config_util.update_fine_tune_checkpoint_type(train_config)
+  config_util.update_fine_tune_checkpoint_type(train_config)  # `detection` 혹은 `classification`
   fine_tune_checkpoint_type = train_config.fine_tune_checkpoint_type
   fine_tune_checkpoint_version = train_config.fine_tune_checkpoint_version
 
-  # Write the as-run pipeline config to disk.
+  # 동적 파이프라인 설정을 디스크에 기록한다.
   if save_final_config:
-    tf.logging.info('Saving pipeline config file to directory {}'.format(
-        model_dir))
+    tf.logging.info(f'파이프라인 설정 파일을 디렉토리 {model_dir}에 기록 중')
     pipeline_config_final = create_pipeline_proto_from_configs(configs)
     config_util.save_pipeline_config(pipeline_config_final, model_dir)
 
-  # Build the model, optimizer, and training input
+  # 모델, 옵티마이저, 그리고 훈련 입력을 빌드한다.
+  ## 모델 빌드.
   strategy = tf.compat.v2.distribute.get_strategy()
   with strategy.scope():
     detection_model = MODEL_BUILD_UTIL_MAP['detection_model_fn_base'](
         model_config=model_config, is_training=True,
         add_summaries=record_summaries)
-
+    # 훈련 입력 빌드.
     def train_dataset_fn(input_context):
-      """Callable to create train input."""
-      # Create the inputs.
-      train_input = inputs.train_input(
+      """훈련 입력을 만들기 위한 Callable."""
+      
+      # 입력을 생성한다. builders.dataset_builder.build를 살펴볼 것.
+      train_input = inputs.train_input(  # `tf.data.Dataset` 타입이 반환됨.
           train_config=train_config,
           train_input_config=train_input_config,
           model_config=model_config,
@@ -564,10 +560,10 @@ def train_loop(
     optimizer, (learning_rate,) = optimizer_builder.build(
         train_config.optimizer, global_step=global_step)
 
-    # We run the detection_model on dummy inputs in order to ensure that the
-    # model and all its variables have been properly constructed. Specifically,
-    # this is currently necessary prior to (potentially) creating shadow copies
-    # of the model variables for the EMA optimizer.
+    # detection_model을 더미 입력을 대상으로 실행한다. 그렇게 하면
+    # 모델과 모델의 모든 변수들이 제대로 구성됐는지 확인할 수 있다.
+    # Specifically, this is currently necessary prior to (potentially)
+    # creating shadow copies of the model variables for the EMA optimizer.
     if train_config.optimizer.use_moving_average:
       _ensure_model_is_built(detection_model, train_input,
                              unpad_groundtruth_tensors)
@@ -578,9 +574,8 @@ def train_loop(
     else:
       learning_rate_fn = lambda: learning_rate
 
-  ## Train the model
-  # Get the appropriate filepath (temporary or not) based on whether the worker
-  # is the chief.
+  ## 모델을 훈련한다.
+  # 적당한 파일 경로(임시적이든 아니든 무관하다)를 worker가 chief인지에 따라 정한다.
   summary_writer_filepath = get_filepath(strategy,
                                          os.path.join(model_dir, 'train'))
 
@@ -591,8 +586,9 @@ def train_loop(
     with strategy.scope():
       with tf.compat.v2.summary.record_if(
           lambda: global_step % num_steps_per_iteration == 0):
-        # Load a fine-tuning checkpoint.
+        # 미세조정 체크포인트를 불러온다.
         if train_config.fine_tune_checkpoint:
+          # 체크포인트 유효성 검사.
           variables_helper.ensure_checkpoint_supported(
               train_config.fine_tune_checkpoint, fine_tune_checkpoint_type,
               model_dir)
@@ -604,21 +600,21 @@ def train_loop(
 
         ckpt = tf.compat.v2.train.Checkpoint(
             step=global_step, model=detection_model, optimizer=optimizer)
-
+        
+        # 체크포인트 매니저 생성
         manager_dir = get_filepath(strategy, model_dir)
         if not strategy.extended.should_checkpoint:
           checkpoint_max_to_keep = 1
         manager = tf.compat.v2.train.CheckpointManager(
             ckpt, manager_dir, max_to_keep=checkpoint_max_to_keep)
-
-        # We use the following instead of manager.latest_checkpoint because
-        # manager_dir does not point to the model directory when we are running
-        # in a worker.
+        
+        # manager.latest_checkpoint 대신에 다음 코드를 사용한다.
+        # 왜냐하면 워커 속에서 실행할 때 manager_dir은 모델 디렉톨기를 가리키지 않는다.
         latest_checkpoint = tf.train.latest_checkpoint(model_dir)
         ckpt.restore(latest_checkpoint)
 
         def train_step_fn(features, labels):
-          """Single train step."""
+          """훈련 단일 단계."""
 
           if record_summaries:
             tf.compat.v2.summary.image(

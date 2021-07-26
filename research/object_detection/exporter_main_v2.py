@@ -60,6 +60,14 @@ python exporter_main_v2.py \
     --side_input_names name_a,name_b,...,name_c \
     --side_input_types type_1,type_2
 
+# 아래를 사용하시오.
+PYTHONPATH=$PYTHONPATH:/home/ubuntu/myproj/models/:/home/ubuntu/myproj/models/research:/home/ubuntu/myproj/models/research/object_detection \
+python exporter_main_v2.py \
+    --input_type image_tensor \
+    --pipeline_config_path /home/ubuntu/myproj/models/research/object_detection/checkpoints/efficientdet_d0_coco17_tpu-32/ssd_efficientdet_d0_512x512_coco17_tpu-8.config \
+    --trained_checkpoint_dir /home/ubuntu/myproj/models/research/object_detection/checkpoints/d0_training \
+    --output_directory /home/ubuntu/myproj/models/research/object_detection/checkpoints/d0_training/exported
+
 The expected output would be in the directory
 path/to/exported_model_directory (which is created if it does not exist)
 holding two subdirectories (corresponding to checkpoint and SavedModel,

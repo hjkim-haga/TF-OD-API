@@ -44,6 +44,9 @@ def build(loss_config):
     ValueError: If random_example_sampler is getting non-positive value as
       desired positive example fraction.
   """
+  # TODO(me): 여기서 나오는 손실을 Hinton이 제시했던 distillation으로 종합하기.
+  # 데이터셋 범위: fine-grained electronics
+  # 교사 모델: EfficientDetD0, 학생 모델: MobileNetV2
   classification_loss = _build_classification_loss(
       loss_config.classification_loss)
   localization_loss = _build_localization_loss(
@@ -53,7 +56,7 @@ def build(loss_config):
   hard_example_miner = None
   if loss_config.HasField('hard_example_miner'):
     if (loss_config.classification_loss.WhichOneof('classification_loss') ==
-        'weighted_sigmoid_focal'):
+        'weight, '):
       raise ValueError('HardExampleMiner should not be used with sigmoid focal '
                        'loss')
     hard_example_miner = build_hard_example_miner(

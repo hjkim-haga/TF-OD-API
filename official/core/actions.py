@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 # Copyright 2021 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -93,7 +92,6 @@ def get_eval_actions(
             max_to_keep=params.trainer.max_to_keep))
 
   return eval_actions
-=======
 # Copyright 2021 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -250,4 +248,3 @@ def get_train_actions(params: config_definitions.ExperimentConfig,
             optimizer=trainer.optimizer))
 
   return train_actions
->>>>>>> 0650ea24129892fb026a27b37028b500fb9383fa

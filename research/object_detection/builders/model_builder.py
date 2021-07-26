@@ -423,8 +423,11 @@ def _build_ssd_model(ssd_config, is_training, add_summaries):
   non_max_suppression_fn, score_conversion_fn = post_processing_builder.build(
       ssd_config.post_processing)
   (classification_loss, localization_loss, classification_weight,
+   # `classification_loss`는 `SigmoidFocalClassificationLoss 클래스`의 인스턴스를 리턴.
+   # `_compute_loss`가 실제 손실 계산을 담당하는데 명시적 호출 없이도 알아서 호출됨.
    localization_weight, hard_example_miner, random_example_sampler,
    expected_loss_weights_fn) = losses_builder.build(ssd_config.loss)
+
   normalize_loss_by_num_matches = ssd_config.normalize_loss_by_num_matches
   normalize_loc_loss_by_codesize = ssd_config.normalize_loc_loss_by_codesize
 
